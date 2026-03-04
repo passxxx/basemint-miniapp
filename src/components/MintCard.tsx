@@ -3,10 +3,16 @@
 import { useCallback, useState } from "react";
 import { useAccount, useReadContract, useSendCalls } from "wagmi";
 import { encodeFunctionData } from "viem";
+import { Attribution } from "ox/erc8021";
 import { ConnectWallet, Wallet } from "@coinbase/onchainkit/wallet";
 import { Avatar, Name, Identity } from "@coinbase/onchainkit/identity";
-import { CONTRACT_ADDRESS, NFT_ABI, BUILDER_CODE_SUFFIX } from "@/lib/contract";
+import { CONTRACT_ADDRESS, NFT_ABI, BUILDER_CODE_NAME } from "@/lib/contract";
 import { trackTransaction } from "@/utils/track";
+
+// Use ox library to generate the official ERC-8021 data suffix
+const DATA_SUFFIX = Attribution.toDataSuffix({
+  codes: [BUILDER_CODE_NAME],
+});
 
 export function MintCard() {
   const { address, isConnected } = useAccount();
@@ -61,26 +67,28 @@ export function MintCard() {
           ],
           capabilities: {
             dataSuffix: {
-              value: BUILDER_CODE_SUFFIX as `0x${string}`,
+              value: DATA_SUFFIX,
               optional: true,
             },
           },
         },
         {
-          onSuccess: (data) => {
+          onSuccess: (data: unknown) => {
             setJustMinted(true);
             refetchSupply();
             setTimeout(() => setJustMinted(false), 3000);
             setIsMinting(false);
 
-            // 归因埋点：提取 txHash 并上报
             try {
-              const txHash = typeof data === "string" ? data : (data as any)?.hash || (data as any)?.id || String(data) || "";
+              const d = data as Record<string, unknown>;
+              const txHash = typeof data === "string"
+                ? data
+                : (d?.hash as string) || (d?.id as string) || String(data) || "";
               if (txHash) {
                 trackTransaction("app-001", "BaseMint", address, txHash);
               }
             } catch {
-              // 静默失败
+              // silent
             }
           },
           onError: () => {
