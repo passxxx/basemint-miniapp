@@ -65,3 +65,4 @@ export const NFT_ABI = [
     type: "function",
   },
 ] as const;
+export const BUILDER_CODE_NAME = "ob4toafm";
