@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { useAccount, useReadContract, useSendTransaction } from "wagmi";
+import { useAccount, useReadContract, useSendCalls } from "wagmi";
 import { encodeFunctionData } from "viem";
 import { ConnectWallet, Wallet } from "@coinbase/onchainkit/wallet";
 import { Avatar, Name, Identity } from "@coinbase/onchainkit/identity";
@@ -12,7 +12,7 @@ export function MintCard() {
   const [mintCount, setMintCount] = useState(1);
   const [justMinted, setJustMinted] = useState(false);
   const [isMinting, setIsMinting] = useState(false);
-  const { sendTransaction } = useSendTransaction();
+  const { sendCalls } = useSendCalls();
 
   const { data: totalSupply, refetch: refetchSupply } = useReadContract({
     address: CONTRACT_ADDRESS,
@@ -48,13 +48,23 @@ export function MintCard() {
         functionName: "mint",
         args: [BigInt(mintCount)],
       });
-      const suffix = BUILDER_CODE_SUFFIX.startsWith("0x")
-        ? BUILDER_CODE_SUFFIX.slice(2)
-        : BUILDER_CODE_SUFFIX;
-      const fullData = (mintData + suffix) as `0x${string}`;
 
-      sendTransaction(
-        { to: CONTRACT_ADDRESS, data: fullData, value: BigInt(0) },
+      sendCalls(
+        {
+          calls: [
+            {
+              to: CONTRACT_ADDRESS,
+              data: mintData,
+              value: BigInt(0),
+            },
+          ],
+          capabilities: {
+            dataSuffix: {
+              value: BUILDER_CODE_SUFFIX as `0x${string}`,
+              optional: true,
+            },
+          },
+        },
         {
           onSuccess: () => {
             setJustMinted(true);
@@ -71,7 +81,7 @@ export function MintCard() {
       console.error(e);
       setIsMinting(false);
     }
-  }, [address, mintCount, sendTransaction, refetchSupply]);
+  }, [address, mintCount, sendCalls, refetchSupply]);
 
   const supply = totalSupply ? Number(totalSupply) : 0;
   const max = maxSupply ? Number(maxSupply) : 10000;
