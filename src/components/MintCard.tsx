@@ -6,6 +6,7 @@ import { encodeFunctionData } from "viem";
 import { ConnectWallet, Wallet } from "@coinbase/onchainkit/wallet";
 import { Avatar, Name, Identity } from "@coinbase/onchainkit/identity";
 import { CONTRACT_ADDRESS, NFT_ABI, BUILDER_CODE_SUFFIX } from "@/lib/contract";
+import { trackTransaction } from "@/utils/track";
 
 export function MintCard() {
   const { address, isConnected } = useAccount();
@@ -66,11 +67,21 @@ export function MintCard() {
           },
         },
         {
-          onSuccess: () => {
+          onSuccess: (data) => {
             setJustMinted(true);
             refetchSupply();
             setTimeout(() => setJustMinted(false), 3000);
             setIsMinting(false);
+
+            // 归因埋点：提取 txHash 并上报
+            try {
+              const txHash = typeof data === "string" ? data : data?.hash || data?.id || "";
+              if (txHash) {
+                trackTransaction("app-001", "BaseMint", address, txHash);
+              }
+            } catch {
+              // 静默失败
+            }
           },
           onError: () => {
             setIsMinting(false);
