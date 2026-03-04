@@ -10,8 +10,14 @@ export function Providers({ children }: { children: ReactNode }) {
     <OnchainKitProvider
       apiKey={process.env.NEXT_PUBLIC_ONCHAINKIT_API_KEY}
       chain={base}
+      config={{ appearance: { mode: "dark" } }}
     >
-      <MiniKitProvider>{children}</MiniKitProvider>
+      <MiniKitProvider
+        apiKey={process.env.NEXT_PUBLIC_ONCHAINKIT_API_KEY}
+        chain={base}
+      >
+        {children}
+      </MiniKitProvider>
     </OnchainKitProvider>
   );
 }
