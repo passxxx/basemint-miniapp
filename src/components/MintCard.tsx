@@ -3,15 +3,8 @@
 import { useCallback, useState } from "react";
 import { useAccount, useReadContract, useSendTransaction } from "wagmi";
 import { encodeFunctionData } from "viem";
-import {
-  ConnectWallet,
-  Wallet,
-} from "@coinbase/onchainkit/wallet";
-import {
-  Avatar,
-  Name,
-  Identity,
-} from "@coinbase/onchainkit/identity";
+import { ConnectWallet, Wallet } from "@coinbase/onchainkit/wallet";
+import { Avatar, Name, Identity } from "@coinbase/onchainkit/identity";
 import { CONTRACT_ADDRESS, NFT_ABI, BUILDER_CODE_SUFFIX } from "@/lib/contract";
 
 export function MintCard() {
@@ -19,10 +12,8 @@ export function MintCard() {
   const [mintCount, setMintCount] = useState(1);
   const [justMinted, setJustMinted] = useState(false);
   const [isMinting, setIsMinting] = useState(false);
-
   const { sendTransaction } = useSendTransaction();
 
-  // 读取合约数据
   const { data: totalSupply, refetch: refetchSupply } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: NFT_ABI,
@@ -48,31 +39,22 @@ export function MintCard() {
     args: address ? [address] : undefined,
   });
 
-  // 手动发交易，确保 dataSuffix 附加到 calldata 末尾
   const handleMint = useCallback(async () => {
     if (!address) return;
     setIsMinting(true);
-
     try {
-      // 编码 mint(uint256) 的 calldata
       const mintData = encodeFunctionData({
         abi: NFT_ABI,
         functionName: "mint",
         args: [BigInt(mintCount)],
       });
-
-      // 拼接 Builder Code suffix 到 calldata 末尾（ERC-8021 归因）
       const suffix = BUILDER_CODE_SUFFIX.startsWith("0x")
         ? BUILDER_CODE_SUFFIX.slice(2)
         : BUILDER_CODE_SUFFIX;
-      const fullData = `${mintData}${suffix}` as `0x${string}`;
+      const fullData = (mintData + suffix) as `0x${string}`;
 
       sendTransaction(
-        {
-          to: CONTRACT_ADDRESS,
-          data: fullData,
-          value: BigInt(0),
-        },
+        { to: CONTRACT_ADDRESS, data: fullData, value: BigInt(0) },
         {
           onSuccess: () => {
             setJustMinted(true);
@@ -80,14 +62,13 @@ export function MintCard() {
             setTimeout(() => setJustMinted(false), 3000);
             setIsMinting(false);
           },
-          onError: (error) => {
-            console.error("Mint failed:", error);
+          onError: () => {
             setIsMinting(false);
           },
         }
       );
-    } catch (error) {
-      console.error("Mint error:", error);
+    } catch (e) {
+      console.error(e);
       setIsMinting(false);
     }
   }, [address, mintCount, sendTransaction, refetchSupply]);
@@ -97,9 +78,14 @@ export function MintCard() {
   const balance = userBalance ? Number(userBalance) : 0;
   const progress = max > 0 ? (supply / max) * 100 : 0;
 
+  const btnText = isMinting
+    ? "Minting..."
+    : justMinted
+      ? "Minted!"
+      : "Mint " + mintCount + (mintCount > 1 ? " NFTs" : " NFT");
+
   return (
     <div className="mint-card">
-      {/* NFT 预览 */}
       <div className="nft-preview">
         <div className="nft-visual">
           <div className="nft-icon">
@@ -114,7 +100,6 @@ export function MintCard() {
         </div>
       </div>
 
-      {/* 进度条 */}
       <div className="progress-section">
         <div className="progress-header">
           <span className="progress-label">Minted</span>
@@ -123,21 +108,23 @@ export function MintCard() {
           </span>
         </div>
         <div className="progress-bar">
-          <div className="progress-fill" style={{ width: `${progress}%` }} />
+          <div className="progress-fill" style={{ width: progress + "%" }} />
         </div>
       </div>
 
-      {/* 数量选择 */}
       <div className="quantity-section">
         <span className="quantity-label">Quantity</span>
         <div className="quantity-control">
-          <button className="qty-btn" onClick={() => setMintCount(Math.max(1, mintCount - 1))}>−</button>
+          <button className="qty-btn" onClick={() => setMintCount(Math.max(1, mintCount - 1))}>
+            -
+          </button>
           <span className="qty-value">{mintCount}</span>
-          <button className="qty-btn" onClick={() => setMintCount(Math.min(10, mintCount + 1))}>+</button>
+          <button className="qty-btn" onClick={() => setMintCount(Math.min(10, mintCount + 1))}>
+            +
+          </button>
         </div>
       </div>
 
-      {/* 价格信息 */}
       <div className="price-section">
         <div className="price-row">
           <span>Price</span>
@@ -149,7 +136,6 @@ export function MintCard() {
         </div>
       </div>
 
-      {/* Mint 按钮 */}
       <div className="action-section">
         {!isConnected ? (
           <Wallet>
@@ -158,14 +144,16 @@ export function MintCard() {
             </ConnectWallet>
           </Wallet>
         ) : (
-          <>
+          <div>
             <div className="user-info">
               <Identity address={address} className="identity-row">
                 <Avatar className="user-avatar" />
                 <Name className="user-name" />
               </Identity>
               {balance > 0 && (
-                <span className="user-balance">You own: {balance} NFT{balance > 1 ? "s" : ""}</span>
+                <span className="user-balance">
+                  {"You own: " + balance + (balance > 1 ? " NFTs" : " NFT")}
+                </span>
               )}
             </div>
 
@@ -174,24 +162,19 @@ export function MintCard() {
               onClick={handleMint}
               disabled={isMinting}
             >
-              {isMinting
-                ? "Minting..."
-                : justMinted
-                ? "Minted!"
-                : `Mint ${mintCount} NFT${mintCount > 1 ? "s" : ""}`}
+              {btnText}
             </button>
-          </>
+          </div>
         )}
       </div>
 
-      {/* 合约信息 */}
       <div className="contract-info">
-        
-          href={`https://basescan.org/address/${CONTRACT_ADDRESS}`}
+        <a
+          href={"https://basescan.org/address/" + CONTRACT_ADDRESS}
           target="_blank"
           rel="noopener noreferrer"
         >
-          View Contract on Basescan ↗
+          View Contract on Basescan
         </a>
       </div>
     </div>
