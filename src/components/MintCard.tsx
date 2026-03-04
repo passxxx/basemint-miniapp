@@ -1,14 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useAccount, useReadContract } from "wagmi";
-import {
-  Transaction,
-  TransactionButton,
-  TransactionStatus,
-  TransactionStatusLabel,
-  TransactionStatusAction,
-} from "@coinbase/onchainkit/transaction";
+import { useCallback, useState } from "react";
+import { useAccount, useReadContract, useSendTransaction } from "wagmi";
+import { encodeFunctionData } from "viem";
 import {
   ConnectWallet,
   Wallet,
@@ -19,12 +13,14 @@ import {
   Identity,
 } from "@coinbase/onchainkit/identity";
 import { CONTRACT_ADDRESS, NFT_ABI, BUILDER_CODE_SUFFIX } from "@/lib/contract";
-import type { LifecycleStatus } from "@coinbase/onchainkit/transaction";
 
 export function MintCard() {
   const { address, isConnected } = useAccount();
   const [mintCount, setMintCount] = useState(1);
   const [justMinted, setJustMinted] = useState(false);
+  const [isMinting, setIsMinting] = useState(false);
+
+  const { sendTransaction } = useSendTransaction();
 
   // 读取合约数据
   const { data: totalSupply, refetch: refetchSupply } = useReadContract({
@@ -52,26 +48,49 @@ export function MintCard() {
     args: address ? [address] : undefined,
   });
 
-  // Mint 交易调用 —— 附带 Builder Code data suffix（ERC-8021 归因）
-  const mintCalls = [
-    {
-      to: CONTRACT_ADDRESS as `0x${string}`,
-      data: encodeMintCall(mintCount),
-      value: BigInt(0),
-      dataSuffix: BUILDER_CODE_SUFFIX as `0x${string}`,
-    },
-  ];
+  // 手动发交易，确保 dataSuffix 附加到 calldata 末尾
+  const handleMint = useCallback(async () => {
+    if (!address) return;
+    setIsMinting(true);
 
-  const handleOnStatus = useCallback(
-    (status: LifecycleStatus) => {
-      if (status.statusName === "success") {
-        setJustMinted(true);
-        refetchSupply();
-        setTimeout(() => setJustMinted(false), 3000);
-      }
-    },
-    [refetchSupply]
-  );
+    try {
+      // 编码 mint(uint256) 的 calldata
+      const mintData = encodeFunctionData({
+        abi: NFT_ABI,
+        functionName: "mint",
+        args: [BigInt(mintCount)],
+      });
+
+      // 拼接 Builder Code suffix 到 calldata 末尾（ERC-8021 归因）
+      const suffix = BUILDER_CODE_SUFFIX.startsWith("0x")
+        ? BUILDER_CODE_SUFFIX.slice(2)
+        : BUILDER_CODE_SUFFIX;
+      const fullData = `${mintData}${suffix}` as `0x${string}`;
+
+      sendTransaction(
+        {
+          to: CONTRACT_ADDRESS,
+          data: fullData,
+          value: BigInt(0),
+        },
+        {
+          onSuccess: () => {
+            setJustMinted(true);
+            refetchSupply();
+            setTimeout(() => setJustMinted(false), 3000);
+            setIsMinting(false);
+          },
+          onError: (error) => {
+            console.error("Mint failed:", error);
+            setIsMinting(false);
+          },
+        }
+      );
+    } catch (error) {
+      console.error("Mint error:", error);
+      setIsMinting(false);
+    }
+  }, [address, mintCount, sendTransaction, refetchSupply]);
 
   const supply = totalSupply ? Number(totalSupply) : 0;
   const max = maxSupply ? Number(maxSupply) : 10000;
@@ -86,16 +105,8 @@ export function MintCard() {
           <div className="nft-icon">
             <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
               <rect width="80" height="80" rx="16" fill="#0052FF" />
-              <path
-                d="M40 20L55 35L40 50L25 35L40 20Z"
-                fill="white"
-                opacity="0.9"
-              />
-              <path
-                d="M40 35L55 50L40 65L25 50L40 35Z"
-                fill="white"
-                opacity="0.5"
-              />
+              <path d="M40 20L55 35L40 50L25 35L40 20Z" fill="white" opacity="0.9" />
+              <path d="M40 35L55 50L40 65L25 50L40 35Z" fill="white" opacity="0.5" />
             </svg>
           </div>
           <h2 className="nft-title">{nftName || "BaseMint NFT"}</h2>
@@ -120,19 +131,9 @@ export function MintCard() {
       <div className="quantity-section">
         <span className="quantity-label">Quantity</span>
         <div className="quantity-control">
-          <button
-            className="qty-btn"
-            onClick={() => setMintCount(Math.max(1, mintCount - 1))}
-          >
-            −
-          </button>
+          <button className="qty-btn" onClick={() => setMintCount(Math.max(1, mintCount - 1))}>−</button>
           <span className="qty-value">{mintCount}</span>
-          <button
-            className="qty-btn"
-            onClick={() => setMintCount(Math.min(10, mintCount + 1))}
-          >
-            +
-          </button>
+          <button className="qty-btn" onClick={() => setMintCount(Math.min(10, mintCount + 1))}>+</button>
         </div>
       </div>
 
@@ -158,7 +159,6 @@ export function MintCard() {
           </Wallet>
         ) : (
           <>
-            {/* 用户信息 */}
             <div className="user-info">
               <Identity address={address} className="identity-row">
                 <Avatar className="user-avatar" />
@@ -169,27 +169,24 @@ export function MintCard() {
               )}
             </div>
 
-            <Transaction
-              chainId={8453}
-              calls={mintCalls}
-              onStatus={handleOnStatus}
+            <button
+              className="mint-btn"
+              onClick={handleMint}
+              disabled={isMinting}
             >
-              <TransactionButton
-                className="mint-btn"
-                text={justMinted ? "Minted!" : `Mint ${mintCount} NFT${mintCount > 1 ? "s" : ""}`}
-              />
-              <TransactionStatus>
-                <TransactionStatusLabel />
-                <TransactionStatusAction />
-              </TransactionStatus>
-            </Transaction>
+              {isMinting
+                ? "Minting..."
+                : justMinted
+                ? "Minted!"
+                : `Mint ${mintCount} NFT${mintCount > 1 ? "s" : ""}`}
+            </button>
           </>
         )}
       </div>
 
       {/* 合约信息 */}
       <div className="contract-info">
-        <a
+        
           href={`https://basescan.org/address/${CONTRACT_ADDRESS}`}
           target="_blank"
           rel="noopener noreferrer"
@@ -199,14 +196,4 @@ export function MintCard() {
       </div>
     </div>
   );
-}
-
-/**
- * 手动编码 mint(uint256) 的 calldata
- * function selector = keccak256("mint(uint256)") 前 4 bytes = 0xa0712d68
- */
-function encodeMintCall(quantity: number): `0x${string}` {
-  const selector = "a0712d68";
-  const param = quantity.toString(16).padStart(64, "0");
-  return `0x${selector}${param}`;
 }
