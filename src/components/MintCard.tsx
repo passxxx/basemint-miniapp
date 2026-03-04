@@ -75,7 +75,7 @@ export function MintCard() {
 
             // 归因埋点：提取 txHash 并上报
             try {
-              const txHash = typeof data === "string" ? data : data?.hash || data?.id || "";
+              const txHash = typeof data === "string" ? data : (data as any)?.hash || (data as any)?.id || String(data) || "";
               if (txHash) {
                 trackTransaction("app-001", "BaseMint", address, txHash);
               }
