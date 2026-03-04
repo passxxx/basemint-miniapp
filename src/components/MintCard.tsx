@@ -1,10 +1,9 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { useAccount, useReadContract, useSendCalls } from "wagmi";
+import { useAccount, useReadContract, useSendCalls, useConnect } from "wagmi";
 import { encodeFunctionData } from "viem";
 import { Attribution } from "ox/erc8021";
-import { ConnectWallet, Wallet } from "@coinbase/onchainkit/wallet";
 import { Avatar, Name, Identity } from "@coinbase/onchainkit/identity";
 import { CONTRACT_ADDRESS, NFT_ABI, BUILDER_CODE_NAME } from "@/lib/contract";
 import { trackTransaction } from "@/utils/track";
@@ -20,6 +19,7 @@ export function MintCard() {
   const [justMinted, setJustMinted] = useState(false);
   const [isMinting, setIsMinting] = useState(false);
   const { sendCalls } = useSendCalls();
+  const { connect, connectors } = useConnect();
 
   const { data: totalSupply, refetch: refetchSupply } = useReadContract({
     address: CONTRACT_ADDRESS,
@@ -166,12 +166,19 @@ export function MintCard() {
       </div>
 
       <div className="action-section">
-        {!isConnected ? (
-          <Wallet>
-            <ConnectWallet className="connect-btn">
-              <span>Connect Wallet to Mint</span>
-            </ConnectWallet>
-          </Wallet>
+       {!isConnected ? (
+          <div className="wallet-options">
+            {connectors.map((connector) => (
+              <button
+                key={connector.uid}
+                className="mint-btn"
+                onClick={() => connect({ connector })}
+                style={{ marginBottom: "8px" }}
+              >
+                {connector.name}
+              </button>
+            ))}
+          </div>
         ) : (
           <div>
             <div className="user-info">
