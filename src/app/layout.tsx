@@ -36,7 +36,7 @@ export default function RootLayout({
       <head>
         {/* base.dev 域名验证 meta 标签 —— 等 Vercel 部署后去 base.dev 拿到实际值再替换 */}
         {/* <meta name="base-verification" content="你的验证码" /> */}
-        <meta name="talentapp:project_verification" content="97c84bf75962f1de940c82a2cab3c2aa4bfc401242214c8df8d1e1f8bf5ef238d5aab71d997bac3a6189716841f6faf4d911a223d5cda4b130482cfcb7725815">
+       <meta name="talentapp:project_verification" content="97c84bf75962f1de940c82a2cab3c2aa4bfc401242214c8df8d1e1f8bf5ef238d5aab71d997bac3a6189716841f6faf4d911a223d5cda4b130482cfcb7725815" />
         <meta name="base:app_id" content="699ffb5dc66a772e1092e799" />
       </head>
       <body>
