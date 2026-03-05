@@ -36,6 +36,7 @@ export default function RootLayout({
       <head>
         {/* base.dev 域名验证 meta 标签 —— 等 Vercel 部署后去 base.dev 拿到实际值再替换 */}
         {/* <meta name="base-verification" content="你的验证码" /> */}
+        <meta name="base:app_id" content="699ffb5dc66a772e1092e799" />
       </head>
       <body>
         <Providers>{children}</Providers>
