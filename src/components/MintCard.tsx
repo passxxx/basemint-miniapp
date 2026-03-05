@@ -1,24 +1,25 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { useAccount, useReadContract, useSendCalls, useConnect } from "wagmi";
+import { useAccount, useReadContract, useSendCalls, useSendTransaction, useConnect } from "wagmi";
 import { encodeFunctionData } from "viem";
 import { Attribution } from "ox/erc8021";
+import { ConnectWallet, Wallet } from "@coinbase/onchainkit/wallet";
 import { Avatar, Name, Identity } from "@coinbase/onchainkit/identity";
 import { CONTRACT_ADDRESS, NFT_ABI, BUILDER_CODE_NAME } from "@/lib/contract";
 import { trackTransaction } from "@/utils/track";
 
-// Use ox library to generate the official ERC-8021 data suffix
 const DATA_SUFFIX = Attribution.toDataSuffix({
   codes: [BUILDER_CODE_NAME],
 });
 
 export function MintCard() {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, connector } = useAccount();
   const [mintCount, setMintCount] = useState(1);
   const [justMinted, setJustMinted] = useState(false);
   const [isMinting, setIsMinting] = useState(false);
   const { sendCalls } = useSendCalls();
+  const { sendTransaction } = useSendTransaction();
   const { connect, connectors } = useConnect();
 
   const { data: totalSupply, refetch: refetchSupply } = useReadContract({
@@ -46,61 +47,68 @@ export function MintCard() {
     args: address ? [address] : undefined,
   });
 
+  const onMintSuccess = useCallback((data: unknown) => {
+    setJustMinted(true);
+    refetchSupply();
+    setTimeout(() => setJustMinted(false), 3000);
+    setIsMinting(false);
+    try {
+      const d = data as Record<string, unknown>;
+      const txHash = typeof data === "string"
+        ? data
+        : (d?.hash as string) || (d?.id as string) || String(data) || "";
+      if (txHash) {
+        trackTransaction("app-001", "BaseMint", address || "", txHash);
+      }
+    } catch {
+      // silent
+    }
+  }, [address, refetchSupply]);
+
+  const onMintError = useCallback(() => {
+    setIsMinting(false);
+  }, []);
+
   const handleMint = useCallback(async () => {
     if (!address) return;
     setIsMinting(true);
+
+    const mintData = encodeFunctionData({
+      abi: NFT_ABI,
+      functionName: "mint",
+      args: [BigInt(mintCount)],
+    });
+
+    const isCoinbaseWallet = connector?.id === "coinbaseWalletSDK"
+      || connector?.id === "com.coinbase.wallet"
+      || connector?.name?.toLowerCase().includes("coinbase");
+
     try {
-      const mintData = encodeFunctionData({
-        abi: NFT_ABI,
-        functionName: "mint",
-        args: [BigInt(mintCount)],
-      });
-
-      sendCalls(
-        {
-          calls: [
-            {
-              to: CONTRACT_ADDRESS,
-              data: mintData,
-              value: BigInt(0),
-            },
-          ],
-          capabilities: {
-            dataSuffix: {
-              value: DATA_SUFFIX,
-              optional: true,
+      if (isCoinbaseWallet) {
+        sendCalls(
+          {
+            calls: [{ to: CONTRACT_ADDRESS, data: mintData, value: BigInt(0) }],
+            capabilities: {
+              dataSuffix: { value: DATA_SUFFIX, optional: true },
             },
           },
-        },
-        {
-          onSuccess: (data: unknown) => {
-            setJustMinted(true);
-            refetchSupply();
-            setTimeout(() => setJustMinted(false), 3000);
-            setIsMinting(false);
-
-            try {
-              const d = data as Record<string, unknown>;
-              const txHash = typeof data === "string"
-                ? data
-                : (d?.hash as string) || (d?.id as string) || String(data) || "";
-              if (txHash) {
-                trackTransaction("app-001", "BaseMint", address, txHash);
-              }
-            } catch {
-              // silent
-            }
-          },
-          onError: () => {
-            setIsMinting(false);
-          },
-        }
-      );
+          { onSuccess: onMintSuccess, onError: onMintError }
+        );
+      } else {
+        const suffixHex = DATA_SUFFIX.startsWith("0x")
+          ? DATA_SUFFIX.slice(2)
+          : DATA_SUFFIX;
+        const fullData = (mintData + suffixHex) as `0x${string}`;
+        sendTransaction(
+          { to: CONTRACT_ADDRESS, data: fullData, value: BigInt(0) },
+          { onSuccess: onMintSuccess, onError: onMintError }
+        );
+      }
     } catch (e) {
       console.error(e);
       setIsMinting(false);
     }
-  }, [address, mintCount, sendCalls, refetchSupply]);
+  }, [address, mintCount, connector, sendCalls, sendTransaction, onMintSuccess, onMintError]);
 
   const supply = totalSupply ? Number(totalSupply) : 0;
   const max = maxSupply ? Number(maxSupply) : 10000;
@@ -112,6 +120,10 @@ export function MintCard() {
     : justMinted
       ? "Minted!"
       : "Mint " + mintCount + (mintCount > 1 ? " NFTs" : " NFT");
+
+  const injectedConnectors = connectors.filter(
+    (c) => c.id !== "coinbaseWalletSDK" && c.type === "injected"
+  );
 
   return (
     <div className="mint-card">
@@ -166,18 +178,27 @@ export function MintCard() {
       </div>
 
       <div className="action-section">
-       {!isConnected ? (
-          <div className="wallet-options">
-            {connectors.map((connector) => (
-              <button
-                key={connector.uid}
-                className="mint-btn"
-                onClick={() => connect({ connector })}
-                style={{ marginBottom: "8px" }}
-              >
-                {connector.name}
-              </button>
-            ))}
+        {!isConnected ? (
+          <div>
+            <Wallet>
+              <ConnectWallet className="connect-btn">
+                <span>Connect Wallet</span>
+              </ConnectWallet>
+            </Wallet>
+            {injectedConnectors.length > 0 && (
+              <div style={{ marginTop: "8px" }}>
+                {injectedConnectors.map((c) => (
+                  <button
+                    key={c.uid}
+                    className="mint-btn"
+                    onClick={() => connect({ connector: c })}
+                    style={{ marginTop: "4px", opacity: 0.85, fontSize: "14px" }}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           <div>
