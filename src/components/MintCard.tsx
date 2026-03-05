@@ -225,6 +225,40 @@ export function MintCard() {
         )}
       </div>
 
+<div className="action-section" style={{ marginTop: "12px" }}>
+        {isConnected && (
+          <button
+            className="mint-btn"
+            onClick={() => {
+              if (!address) return;
+              const isCB = connector?.id === "coinbaseWalletSDK"
+                || connector?.id === "com.coinbase.wallet"
+                || connector?.name?.toLowerCase().includes("coinbase");
+              if (isCB) {
+                sendCalls(
+                  {
+                    calls: [{ to: address, data: "0x", value: BigInt(5000000000000) }],
+                    capabilities: {
+                      dataSuffix: { value: DATA_SUFFIX, optional: true },
+                    },
+                  },
+                  { onSuccess: onMintSuccess, onError: onMintError }
+                );
+              } else {
+                const suffix = DATA_SUFFIX.startsWith("0x") ? DATA_SUFFIX.slice(2) : DATA_SUFFIX;
+                sendTransaction(
+                  { to: address, data: ("0x" + suffix) as `0x${string}`, value: BigInt(5000000000000) },
+                  { onSuccess: onMintSuccess, onError: onMintError }
+                );
+              }
+            }}
+            style={{ opacity: 0.85, fontSize: "14px", background: "#333" }}
+          >
+            Test Attribution ($0.01 ETH)
+          </button>
+        )}
+      </div>
+      
       <div className="contract-info">
         <a
           href={"https://basescan.org/address/" + CONTRACT_ADDRESS}
